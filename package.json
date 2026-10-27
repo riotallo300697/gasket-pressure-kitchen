@@ -1,0 +1,9 @@
+{
+  "name": "gasket-pressure-kitchen",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gasket's Pressure Kitchen: an arcade pressure game on an HTML5 canvas, no build step.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0D0908">
+  <meta name="description" content="Gasket's Pressure Kitchen: keep the pod cooking between 65 and 85 PSI without blowing the valve.">
+  <title>Gasket's Pressure Kitchen</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230D0908'/%3E%3Cg fill='%23F3EEE9'%3E%3Cpath d='M18 24.5C19.2 14 44.8 14 46 24.5Z'/%3E%3Crect x='30.5' y='9' width='3' height='7'/%3E%3Cpath d='M14 26.5H50L51 40C51 49 43 52.5 32 52.5S13 49 13 40Z'/%3E%3C/g%3E%3Ccircle cx='32' cy='7' r='2.6' fill='%23F05A18'/%3E%3Ccircle cx='32' cy='41.5' r='5.2' fill='%23F05A18'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #0D0908;      /* the control room */
+      --panel: #140D0B;
+      --line: #2A1E19;
+      --text: #F3EEE9;
+      --muted: #A8968A;
+      --heat: #F05A18;    /* orange heat */
+      --amber: #FFB35C;   /* amber heat */
+      --danger: #E8391D;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      --display: "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --scale: 1;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      font: 15px/1.5 var(--mono);
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    ::selection { background: var(--heat); color: var(--bg); }
+
+    /* A 1280×720 stage, scaled to fit the window (main.js sets --scale). */
+    .stage {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 1280px;
+      height: 720px;
+      transform: translate(-50%, -50%) scale(var(--scale));
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
+    }
+
+    #scene {
+      position: absolute;
+      inset: 0;
+      width: 1280px;
+      height: 720px;
+      display: block;
+      outline: none;
+      cursor: grab;
+    }
+
+    .stage[data-mode="playing"] #scene:active { cursor: grabbing; }
+
+    .label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* HUD */
+    .hud {
+      position: absolute;
+      top: 16px;
+      left: 24px;
+      right: 24px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: start;
+      gap: 24px;
+      pointer-events: none;
+    }
+
+    .score {
+      display: block;
+      font: 800 44px/1.05 var(--mono);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+
+    .combo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .combo-badge {
+      min-width: 40px;
+      padding: 1px 8px;
+      font: 800 16px/1.4 var(--mono);
+      text-align: center;
+      color: var(--bg);
+      background: var(--muted);
+      transition: background 0.2s;
+    }
+
+    .combo-badge:not([data-level="1"]) { background: var(--amber); }
+    .combo-badge[data-level="5"] { background: var(--heat); }
+
+    .bar {
+      display: block;
+      height: 6px;
+      overflow: hidden;
+      background: var(--line);
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      transform: scaleX(0);
+      transform-origin: left;
+      background: var(--amber);
+    }
+
+    .combo .bar { width: 110px; }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 4px;
+      padding: 8px 16px;
+      font: 700 14px/1.2 var(--mono);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(20, 13, 11, 0.86);
+      border: 1px solid var(--line);
+    }
+
+    .status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .status[data-tone="zone"] { color: var(--heat); border-color: rgba(240, 90, 24, 0.55); }
+    .status[data-tone="hot"] { color: var(--amber); border-color: rgba(255, 179, 92, 0.5); animation: blink 0.7s steps(2) infinite; }
+    .status[data-tone="critical"] { color: var(--danger); border-color: rgba(232, 57, 29, 0.7); animation: blink 0.3s steps(2) infinite; }
+
+    .panel {
+      width: 290px;
+      padding: 10px 14px 12px;
+      background: rgba(20, 13, 11, 0.86);
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--heat);
+    }
+
+    .ticket { justify-self: end; }
+
+    .ticket strong {
+      display: block;
+      margin: 2px 0 8px;
+      font: 800 17px/1.2 var(--mono);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ticket .bar > span { background: var(--heat); }
+    .ticket .label:last-child { display: block; margin-top: 8px; }
+
+    .bump { animation: bump 0.45s ease-out; }
+
+    /* The digital readout, set into the gauge's face. */
+    .readout {
+      position: absolute;
+      left: 232px;
+      top: 458px;
+      width: 120px;
+      height: 40px;
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 6px;
+      padding-top: 3px;
+      font: 800 27px/1.2 var(--mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+      background: #080504;
+      border: 1px solid var(--line);
+      pointer-events: none;
+    }
+
+    .readout small { font-size: 11px; letter-spacing: 0.14em; color: var(--muted); }
+    .readout[data-band="zone"] { color: var(--heat); }
+    .readout[data-band="hot"] { color: var(--amber); }
+    .readout[data-band="critical"], .readout[data-band="blowout"] { color: var(--danger); animation: blink 0.3s steps(2) infinite; }
+
+    .footer {
+      position: absolute;
+      left: 24px;
+      right: 24px;
+      bottom: 14px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 26px;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    kbd {
+      display: inline-block;
+      min-width: 24px;
+      padding: 1px 7px;
+      font: 700 12px/1.5 var(--mono);
+      color: var(--text);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-bottom-width: 3px;
+      text-align: center;
+    }
+
+    .sound {
+      position: absolute;
+      right: 0;
+      padding: 5px 12px;
+      font: 700 11px/1.4 var(--mono);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .sound[aria-pressed="true"] { color: var(--text); }
+    .sound:hover { border-color: var(--heat); }
+
+    /* Screens */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      background: rgba(13, 9, 8, 0.72);
+    }
+
+    .overlay[hidden] { display: none; }
+
+    .card {
+      width: 620px;
+      padding: 34px 40px 30px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65);
+      animation: rise 0.35s ease-out;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0;
+      font: 700 12px/1 var(--mono);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--heat);
+      box-shadow: 0 0 10px var(--heat);
+    }
+
+    .eyebrow.alarm { color: var(--danger); }
+    .eyebrow.alarm::before { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+
+    h1, h2 {
+      margin: 14px 0 12px;
+      font: 900 44px/1.02 var(--display);
+      letter-spacing: -0.01em;
+    }
+
+    .card p { margin: 0 0 12px; color: #D9CFC7; }
+    .card p strong { color: var(--heat); }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-top: 22px;
+    }
+
+    .button {
+      padding: 14px 26px;
+      font: 800 15px/1 var(--mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--bg);
+      background: var(--heat);
+      border: 0;
+      cursor: pointer;
+    }
+
+    .button:hover { background: #FF6B2B; }
+    .button.secondary { color: var(--text); background: transparent; border: 1px solid var(--line); }
+    .button.secondary:hover { border-color: var(--heat); }
+    .button:focus-visible, .sound:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+
+    .hint { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 22px;
+      margin: 18px 0 0;
+      padding: 14px 0 0;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .final {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin: 6px 0 4px;
+    }
+
+    .final output {
+      font: 800 62px/1 var(--mono);
+      font-variant-numeric: tabular-nums;
+      color: var(--heat);
+    }
+
+    .final span { font: 700 13px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+    .final span.is-new { color: var(--bg); background: var(--amber); padding: 3px 8px; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin: 18px 0 0;
+    }
+
+    .stats div { padding: 10px 12px; border: 1px solid var(--line); }
+    .stats dt { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+    .stats dd { margin: 2px 0 0; font: 800 20px/1.2 var(--mono); }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    @keyframes blink { 50% { opacity: 0.45; } }
+    @keyframes bump { 30% { transform: scale(1.08); } }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .status, .readout, .card, .bump { animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main id="stage" class="stage" data-mode="ready">
+    <canvas id="scene" width="1280" height="720" tabindex="-1"
+      aria-label="Gasket's control room: the pressure gauge, the pod and the vent lever. Hold Space, or press and hold, to vent steam."></canvas>
+
+    <header class="hud">
+      <div class="panel scoreboard">
+        <span class="label">Score</span>
+        <output id="score" class="score" aria-label="Score">0</output>
+        <div class="combo">
+          <span id="combo" class="combo-badge" data-level="1">×1</span>
+          <span class="bar"><span id="combo-fill"></span></span>
+          <span class="label">Combo</span>
+        </div>
+      </div>
+      <div id="status" class="status" data-tone="idle">Press Space to start</div>
+      <div class="panel ticket">
+        <span id="order-label" class="label">Order 01 / 08</span>
+        <strong id="dish">Cheddar Chowder</strong>
+        <span class="bar"><span id="order-fill"></span></span>
+        <span id="served" class="label">Served 0 · Best 0</span>
+      </div>
+    </header>
+
+    <div id="psi" class="readout" role="meter" aria-label="Pod pressure in PSI"
+      aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-band="low">
+      <span id="psi-value">000</span><small>PSI</small>
+    </div>
+
+    <footer class="footer">
+      <span><kbd>Space</kbd> or click &amp; hold: vent steam</span>
+      <span><kbd>P</kbd> pause</span>
+      <span><kbd>M</kbd> sound</span>
+      <button id="sound" class="sound" type="button" aria-pressed="true">Sound on</button>
+    </footer>
+
+    <section id="start-screen" class="overlay" aria-labelledby="start-title">
+      <div class="card">
+        <p class="eyebrow">Hotpod · Pod 01</p>
+        <h1 id="start-title">Gasket's Pressure Kitchen</h1>
+        <p>The pod builds pressure on its own. Hold <strong>Space</strong>, or click and hold anywhere, to pull Gasket's lever and vent steam.</p>
+        <p>Keep the needle in the orange <strong>65–85 PSI</strong> zone to cook and score. Stay there to raise the combo and serve orders; serve eight to finish the shift. At <strong>100 PSI</strong> the valve blows.</p>
+        <div class="actions">
+          <button id="start-button" class="button" type="button">Start cooking</button>
+          <span class="hint">or press Space</span>
+          <span id="start-best" class="hint"></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="pause-screen" class="overlay" aria-labelledby="pause-title" hidden>
+      <div class="card">
+        <p class="eyebrow">Paused</p>
+        <h2 id="pause-title">Pod on hold</h2>
+        <p>The pressure holds still until you are back.</p>
+        <div class="actions">
+          <button id="resume-button" class="button" type="button">Resume</button>
+          <span class="hint">or press Space or P</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="over-screen" class="overlay" role="dialog" aria-labelledby="over-title" hidden>
+      <div class="card">
+        <p class="eyebrow alarm">Valve blowout · 100 PSI</p>
+        <h2 id="over-title">Game Over</h2>
+        <p>The lid is in orbit.</p>
+        <span class="label">Final score</span>
+        <div class="final"><output id="over-score">0</output><span id="over-best"></span></div>
+        <dl id="over-stats" class="stats"></dl>
+        <div class="actions">
+          <button id="again-button" class="button" type="button">Play again</button>
+          <span class="hint">or press Space</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="win-screen" class="overlay" role="dialog" aria-labelledby="win-title" hidden>
+      <div class="card">
+        <p class="eyebrow">Shift complete · 8 orders</p>
+        <h2 id="win-title">Order up, all eight!</h2>
+        <p>Every order served, and the valve is still on. Keep cooking into overtime, where the burner keeps climbing, or start a new shift.</p>
+        <span class="label">Score</span>
+        <div class="final"><output id="win-score">0</output></div>
+        <dl id="win-stats" class="stats"></dl>
+        <div class="actions">
+          <button id="keep-button" class="button" type="button">Keep cooking</button>
+          <button id="win-again-button" class="button secondary" type="button">Play again</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <p id="announcer" class="visually-hidden" aria-live="polite"></p>
+
+  <script src="src/sim.js"></script>
+  <script src="src/render.js"></script>
+  <script src="src/audio.js"></script>
+  <script src="src/main.js"></script>
+</body>
+</html>
