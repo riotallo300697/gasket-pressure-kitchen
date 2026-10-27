@@ -359,7 +359,7 @@
       margin: 6px 0 4px;
     }
 
-    .final output {
+    .final strong {
       font: 800 62px/1 var(--mono);
       font-variant-numeric: tabular-nums;
       color: var(--heat);
@@ -424,7 +424,7 @@
     <header class="hud">
       <div class="panel scoreboard">
         <span class="label">Score</span>
-        <output id="score" class="score" aria-label="Score">0</output>
+        <span id="score" class="score">0</span>
         <div class="combo">
           <span id="combo" class="combo-badge" data-level="1">×1</span>
           <span class="bar"><span id="combo-fill"></span></span>
@@ -484,7 +484,7 @@
         <h2 id="over-title">Game Over</h2>
         <p>The lid is in orbit.</p>
         <span class="label">Final score</span>
-        <div class="final"><output id="over-score">0</output><span id="over-best"></span></div>
+        <div class="final"><strong id="over-score">0</strong><span id="over-best"></span></div>
         <dl id="over-stats" class="stats"></dl>
         <div class="actions">
           <button id="again-button" class="button" type="button">Play again</button>
@@ -499,7 +499,7 @@
         <h2 id="win-title">Order up, all eight!</h2>
         <p>Every order served, and the valve is still on. Keep cooking into overtime, where the burner keeps climbing, or start a new shift.</p>
         <span class="label">Score</span>
-        <div class="final"><output id="win-score">0</output></div>
+        <div class="final"><strong id="win-score">0</strong></div>
         <dl id="win-stats" class="stats"></dl>
         <div class="actions">
           <button id="keep-button" class="button" type="button">Keep cooking</button>

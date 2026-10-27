@@ -88,6 +88,7 @@
 
     const fx = {};
     const cracks = makeCracks();
+    let pulledOnce = false; // the lever hint shows until the first pull of the visit
 
     function reset() {
       Object.assign(fx, {
@@ -116,6 +117,8 @@
         bubbleAge: 0,
         orderUp: 0,
         lastLever: 0,
+        hint: 0,
+        brink: 0,
       });
     }
     reset();
@@ -298,6 +301,15 @@
         if (band === 'hot' || band === 'critical') fx.shake = Math.max(fx.shake, ((game.psi - 85) / 15) * 4);
       }
       fx.lastLever = live ? game.lever : 0;
+      if (live && game.lever > 0.5) pulledOnce = true;
+      fx.hint = live && !pulledOnce ? Math.min(1, fx.hint + dt * 2) : Math.max(0, fx.hint - dt * 3);
+
+      // Back from the brink: a close call when the needle drops into the zone after 95 PSI or more.
+      if (live && game.psi >= 95) fx.brink = Math.max(fx.brink, game.psi);
+      if (live && fx.brink && game.psi <= 85) {
+        popup('CLOSE CALL!', POD.x, POD.y - 300, COLORS.amber, 24);
+        fx.brink = 0;
+      }
 
       // After a blowout: the lid and the toque fly, smoke pours out of the open pod.
       if (fx.blown) {
@@ -410,6 +422,7 @@
       drawFlying(c);
       drawPopups(c);
       drawBubble(c);
+      drawHint(c, knob);
 
       // Screen-space layers, not shaken.
       c.setTransform(1, 0, 0, 1, 0, 0);
@@ -420,7 +433,7 @@
         c.drawImage(alarmGlow, 0, 0);
       }
       if (fx.flash > 0) {
-        c.globalAlpha = fx.flash * 0.85;
+        c.globalAlpha = fx.flash * (reducedMotion ? 0.3 : 0.85);
         c.fillStyle = '#FFE7CF';
         c.fillRect(0, 0, canvas.width, canvas.height);
       }
@@ -1320,6 +1333,50 @@
         c.fillText(p.text, p.x, p.y - rise * 40);
       }
       c.globalAlpha = 1;
+    }
+
+    // A pointer to the lever for a first-time cook.
+    function drawHint(c, knob) {
+      if (fx.hint <= 0) return;
+      const pulse = 0.75 + 0.25 * Math.sin(fx.t * 6);
+      const x = knob.x - 150;
+      const y = knob.y - 64;
+      c.save();
+      c.globalAlpha = fx.hint * pulse;
+      c.font = `800 15px ${MONO}`;
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      const w = c.measureText('HOLD SPACE').width + 28;
+      c.fillStyle = 'rgba(13, 9, 8, 0.92)';
+      roundRect(c, x - w / 2, y - 26, w, 52, 6);
+      c.fill();
+      c.strokeStyle = COLORS.amber;
+      c.lineWidth = 2;
+      c.stroke();
+      c.fillStyle = COLORS.cream;
+      c.fillText('HOLD SPACE', x, y - 8);
+      c.font = `700 11px ${MONO}`;
+      c.fillStyle = COLORS.amber;
+      c.fillText('OR CLICK & HOLD', x, y + 11);
+      // An arrow to the knob.
+      const tx = knob.x - 22;
+      const ty = knob.y - 10;
+      const sx = x + w / 2 + 4;
+      c.strokeStyle = COLORS.amber;
+      c.lineWidth = 3;
+      c.lineCap = 'round';
+      c.beginPath();
+      c.moveTo(sx, y);
+      c.quadraticCurveTo(tx - 10, y, tx, ty);
+      c.stroke();
+      const a = Math.atan2(ty - y, tx - (tx - 10));
+      c.beginPath();
+      c.moveTo(tx, ty);
+      c.lineTo(tx - Math.cos(a - 0.5) * 11, ty - Math.sin(a - 0.5) * 11);
+      c.moveTo(tx, ty);
+      c.lineTo(tx - Math.cos(a + 0.5) * 11, ty - Math.sin(a + 0.5) * 11);
+      c.stroke();
+      c.restore();
     }
 
     function drawBubble(c) {
