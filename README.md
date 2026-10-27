@@ -70,7 +70,10 @@ Every number is in `TUNING` at the top of [`src/sim.js`](src/sim.js).
 | --- | --- |
 | `index.html` | the page: the canvas, the HUD, the screens and their styles |
 | `src/sim.js` | the rules: pressure, lever, zone, combo, orders, surges, blowout; no DOM, the same seed replays the same game |
-| `src/render.js` | the canvas: the room, the gauge, the pod, the lever, Gasket, steam, sparks and confetti |
+| `src/art.js` | what the drawing shares: the stage's layout, the palette, small canvas helpers |
+| `src/room.js` | the room's still parts, painted once per size: wall, pipes, floor, the gauge's face, the lever's box |
+| `src/gasket.js` | Gasket, the robot rat chef, in his seven moods, his arm reaching the lever |
+| `src/render.js` | each frame: the needle, the pod, the flames, the lever, steam, sparks, popups and screen effects |
 | `src/audio.js` | the sounds, made with Web Audio |
 | `src/main.js` | input, the fixed-step loop, the screens and the HUD |
 | `test/sim.test.js` | the rules, stepped in Node |

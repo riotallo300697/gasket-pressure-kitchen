@@ -11,7 +11,7 @@ const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) 
 const sources = { 'index.html': html, ...Object.fromEntries(scripts.map((file) => [file, read(file)])) };
 
 test('index.html loads every script it names, from the repository, in order', () => {
-  assert.deepEqual(scripts, ['src/sim.js', 'src/render.js', 'src/audio.js', 'src/main.js']);
+  assert.deepEqual(scripts, ['src/sim.js', 'src/art.js', 'src/room.js', 'src/gasket.js', 'src/render.js', 'src/audio.js', 'src/main.js']);
   for (const file of scripts) assert.ok(fs.existsSync(path.join(root, file)), `${file} is missing`);
   assert.doesNotMatch(html, /(src|href)="(https?:)?\/\//, 'no external files');
 });
