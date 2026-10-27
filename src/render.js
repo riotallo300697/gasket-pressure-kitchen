@@ -175,10 +175,10 @@
       fx.soot = 1;
       fx.lid = { x: LID_CENTER.x, y: LID_CENTER.y, vx: rand(-70, 70), vy: -1350, rot: 0, spin: rand(-7, 7) };
       fx.hat = { x: GASKET.x - 2, y: GASKET.y - 300, vx: rand(-190, -120), vy: -760, rot: 0, spin: rand(-9, -4) };
-      for (let i = 0; i < 150; i += 1) {
+      for (let i = 0; i < 70; i += 1) {
         const a = -Math.PI / 2 + rand(-1.6, 1.6);
         const speed = rand(250, 950);
-        spawn({ kind: 'steam', x: LID_CENTER.x + rand(-60, 60), y: LID_CENTER.y + rand(-10, 30), vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, size: rand(26, 54), grow: 130, life: rand(1.2, 2.5), drag: 1.9, alpha: 0.85 });
+        spawn({ kind: 'steam', x: LID_CENTER.x + rand(-60, 60), y: LID_CENTER.y + rand(-10, 30), vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, size: rand(30, 60), grow: 70, life: rand(0.9, 1.8), drag: 1.9, alpha: 0.9 });
       }
       for (let i = 0; i < 60; i += 1) {
         const a = rand(0, TAU);
@@ -257,7 +257,6 @@
             spawn({ kind: 'spark', x: seam.x, y: seam.y, vx: side * rand(80, 260), vy: -rand(80, 260), gravity: 900, drag: 0.6, life: rand(0.3, 0.6) });
           }
         }
-        if (band === 'hot' || band === 'critical') fx.shake = Math.max(fx.shake, ((game.psi - 85) / 15) * 4);
       }
       fx.lastLever = live ? game.lever : 0;
       if (live && game.lever > 0.5) pulledOnce = true;
@@ -280,10 +279,10 @@
           fx.hat.vx *= 0.6;
           fx.hat.spin *= 0.5;
         }
-        fx.smokeDue += 9 * dt;
+        fx.smokeDue += 6 * dt;
         while (fx.smokeDue >= 1) {
           fx.smokeDue -= 1;
-          spawn({ kind: 'soot', x: LID_CENTER.x + rand(-60, 60), y: LID_CENTER.y + 50, vx: rand(-20, 20), vy: -rand(60, 120), size: rand(20, 34), grow: 50, life: rand(1.6, 2.6), drag: 0.6, alpha: 0.6 });
+          spawn({ kind: 'soot', x: LID_CENTER.x + rand(-60, 60), y: LID_CENTER.y + 50, vx: rand(-20, 20), vy: -rand(60, 120), size: rand(20, 34), grow: 30, life: rand(1.6, 2.4), drag: 0.6, alpha: 0.6 });
         }
       }
 
@@ -607,9 +606,10 @@
 
     function drawPod(c, game, mode, heat) {
       const psi = mode === 'ready' ? 0 : game.psi;
+      // A hot pod rattles on its feet; the room itself stays still (it shakes only on a surge or a blowout).
       const rattle = mode === 'playing' ? clamp((psi - 80) / 20, 0, 1) : 0;
-      const jx = rattle ? Math.sin(fx.t * 64) * rattle * rattle * 2.6 : 0;
-      const jy = rattle ? Math.cos(fx.t * 71) * rattle * rattle * 1.4 : 0;
+      const jx = rattle ? Math.sin(fx.t * 64) * rattle * rattle * 3.4 : 0;
+      const jy = rattle ? Math.cos(fx.t * 71) * rattle * rattle * 1.8 : 0;
 
       c.save();
       c.translate(POD.x + jx, POD.y + jy);
@@ -1027,7 +1027,12 @@
       c.restore();
     }
 
-    return { resize, reset, event, frame };
+    // This frame's shake in stage pixels, for what the page lays over the canvas (the readout).
+    function shake() {
+      return { x: shakeX, y: shakeY };
+    }
+
+    return { resize, reset, event, frame, shake };
   }
 
   // ------------------------------------------------------------- helpers

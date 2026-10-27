@@ -203,6 +203,7 @@
 
     const band = Sim.band(game.psi);
     renderer.frame(dt, game, mode, Sim);
+    followShake();
     audio.update(dt, game, mode, band);
     updateHud(band);
     window.requestAnimationFrame(frame);
@@ -227,7 +228,7 @@
   function updateHud(band) {
     show('score', ui.score, formatScore(game.score));
     show('combo', ui.combo, `×${game.combo}`);
-    setAttr('combo-fill', ui.comboFill, 'style', `transform: scaleX(${Sim.comboProgress(game).toFixed(2)})`);
+    setAttr('combo-fill', ui.comboFill, 'style', `transform: scaleX(${step(Sim.comboProgress(game), 50)})`);
     setAttr('combo-level', ui.combo, 'data-level', String(game.combo));
 
     const [text, tone] = statusFor(band);
@@ -238,13 +239,18 @@
     const overtime = order.number > TUNING.shiftOrders;
     show('order', ui.orderLabel, overtime ? `Order ${pad(order.number, 2)} · overtime` : `Order ${pad(order.number, 2)} / ${pad(TUNING.shiftOrders, 2)}`);
     show('dish', ui.dish, order.dish);
-    setAttr('order-fill', ui.orderFill, 'style', `transform: scaleX(${(order.cooked / order.cookTime).toFixed(3)})`);
+    setAttr('order-fill', ui.orderFill, 'style', `transform: scaleX(${step(order.cooked / order.cookTime, 100)})`);
     show('served', ui.served, `Served ${game.served} · Best ${formatScore(best)}`);
 
     const psi = mode === 'ready' ? 0 : Math.round(game.psi);
     show('psi', ui.psi, pad(psi, 3));
     setAttr('psi-now', ui.meter, 'aria-valuenow', String(psi));
     setAttr('psi-band', ui.meter, 'data-band', mode === 'ready' ? 'low' : band);
+  }
+
+  // A share rounded to so many steps, as a string: bars move in steps a player can see, not every frame.
+  function step(share, steps) {
+    return String(Math.round(Math.min(1, Math.max(0, share)) * steps) / steps);
   }
 
   function statusFor(band) {
@@ -403,6 +409,19 @@
 
   // ------------------------------------------------------------- the stage
 
+  // The readout sits on the gauge, over the canvas: it shakes with it.
+  let readoutBase = '';
+  let readoutShaken = '';
+  function followShake() {
+    const s = renderer.shake();
+    const moved = s.x || s.y ? `translate(${s.x.toFixed(1)}px, ${s.y.toFixed(1)}px) ` : '';
+    const transform = moved + readoutBase;
+    if (transform !== readoutShaken) {
+      readoutShaken = transform;
+      ui.meter.style.transform = transform;
+    }
+  }
+
   // Upright screens (phones held upright) get the tall layout, as tall as their shape allows;
   // the others the wide one. The stage then scales to fit the window.
   function fit() {
@@ -418,7 +437,8 @@
     const readout = Art.toStage(layout.gauge, Art.READOUT.x, Art.READOUT.y);
     ui.meter.style.left = `${readout.x}px`;
     ui.meter.style.top = `${readout.y}px`;
-    ui.meter.style.transform = `scale(${layout.gauge.k})`;
+    readoutBase = `scale(${layout.gauge.k})`;
+    readoutShaken = '';
     // At most 2 device pixels per stage pixel: sharp enough, and cheap on big screens.
     renderer.resize(layout, scale, Math.min(2 / scale, window.devicePixelRatio || 1));
   }
