@@ -55,6 +55,9 @@ Every number is in `TUNING` at the top of [`src/sim.js`](src/sim.js).
 - A title screen comes first, so the pressure starts rising when the player is ready. Space, Enter or
   a click starts the game at 45 PSI, about three seconds below the zone.
 - The whole room is the lever's click target, not only its knob, so any click or touch pulls it.
+- Phones held upright get a tall layout: the HUD on top, the gauge in the middle, the pod, the lever
+  and Gasket below, filling the screen; the texts speak of touch instead of Space. Held sideways, or
+  on a wider screen, the room is the wide stage, with bigger type when it is drawn small.
 - Both ends of the zone count: 65 and 85 PSI are in it.
 - Success and failure: in the zone the status bar, the gauge's band, the readout, the score and
   Gasket all show it; each served order is a small win with a bonus; eight orders end the shift on a
@@ -70,7 +73,7 @@ Every number is in `TUNING` at the top of [`src/sim.js`](src/sim.js).
 | --- | --- |
 | `index.html` | the page: the canvas, the HUD, the screens and their styles |
 | `src/sim.js` | the rules: pressure, lever, zone, combo, orders, surges, blowout; no DOM, the same seed replays the same game |
-| `src/art.js` | what the drawing shares: the stage's layout, the palette, small canvas helpers |
+| `src/art.js` | what the drawing shares: the two layouts (wide, tall), the palette, small canvas helpers |
 | `src/room.js` | the room's still parts, painted once per size: wall, pipes, floor, the gauge's face, the lever's box |
 | `src/gasket.js` | Gasket, the robot rat chef, in his seven moods, his arm reaching the lever |
 | `src/render.js` | each frame: the needle, the pod, the flames, the lever, steam, sparks, popups and screen effects |

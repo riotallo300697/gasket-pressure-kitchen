@@ -1,27 +1,35 @@
 /*
  * Gasket's Pressure Kitchen: everything drawn on the canvas.
  *
- * The scene is laid out on a 1280×720 stage. What never moves (the wall, the
- * pipes, the gauge's face) is painted once per canvas size into a cache; the
- * needle, the pod, the lever, Gasket, the flames and the steam every frame.
- * The renderer keeps its own visual state (the needle's spring, particles,
- * shake), fed by the game's events; it never changes the game.
+ * The scene is drawn in world coordinates (the wide stage's) and placed on the
+ * stage through the layout's two views, the gauge and the machine (art.js).
+ * What never moves (the wall, the pipes, the gauge's face) is painted once per
+ * layout and canvas size into a cache; the needle, the pod, the lever, Gasket,
+ * the flames and the steam every frame. Text (popups, Gasket's line, the lever
+ * hint) and confetti are drawn on the stage itself, so they stay readable when
+ * the machine is drawn small. The renderer keeps its own visual state (the
+ * needle's spring, particles, shake), fed by the game's events; it never
+ * changes the game.
  */
 (function (root) {
   'use strict';
 
-  const { W, H, FLOOR, TAU, COLORS, MONO, GAUGE, POD, LEVER, BEACONS, MARK, VALVE, LID_CENTER } = root.GasketArt;
-  const { GASKET, markPoint, psiAngle, clamp, rand, mix, makeCanvas, makePuff, makeGlow, disc, roundRect } = root.GasketArt;
+  const { FLOOR, TAU, COLORS, MONO, GAUGE, POD, LEVER, MARK, VALVE, LID_CENTER, GASKET } = root.GasketArt;
+  const { wideLayout, toStage, markPoint, psiAngle, clamp, rand, mix, makeCanvas, makePuff, makeGlow, disc, roundRect } = root.GasketArt;
   const Room = root.GasketRoom;
   const Chef = root.GasketChef;
 
   function create(canvas, options) {
     const ctx = canvas.getContext('2d');
     const reducedMotion = Boolean(options && options.reducedMotion);
+    const touch = Boolean(options && options.touch); // the lever hint says touch rather than Space
     const paths = {};
     for (const key of Object.keys(MARK)) paths[key] = new Path2D(MARK[key]);
 
+    let layout = wideLayout();
     let scale = 1; // device pixels per stage pixel
+    let shakeX = 0; // this frame's shake, in stage pixels
+    let shakeY = 0;
     let cache = null; // the static room
     let vignette = null;
     let alarmGlow = null;
@@ -43,8 +51,9 @@
         needleSpeed: 0,
         shake: 0,
         flash: 0,
-        particles: [],
-        popups: [],
+        particles: [], // steam, sparks, bolts and soot, in world coordinates
+        confetti: [], // on the stage
+        popups: [], // on the stage
         steamDue: 0,
         leakDue: 0,
         smokeDue: 0,
@@ -69,13 +78,15 @@
     }
     reset();
 
-    function resize(stageScale, dpr) {
+    // A layout from art.js, the stage's CSS scale and the device's pixel ratio.
+    function resize(nextLayout, stageScale, dpr) {
+      layout = nextLayout;
       scale = stageScale * dpr;
-      canvas.width = Math.max(1, Math.round(W * scale));
-      canvas.height = Math.max(1, Math.round(H * scale));
-      cache = paintToCanvas((c) => Room.paintRoom(c));
-      vignette = paintToCanvas((c) => Room.paintVignette(c, 'rgba(5, 3, 2, 0.78)', 300));
-      alarmGlow = paintToCanvas((c) => Room.paintVignette(c, 'rgba(232, 57, 29, 0.9)', 380));
+      canvas.width = Math.max(1, Math.round(layout.width * scale));
+      canvas.height = Math.max(1, Math.round(layout.height * scale));
+      cache = paintToCanvas((c) => Room.paintRoom(c, layout));
+      vignette = paintToCanvas((c) => Room.paintVignette(c, layout, 'rgba(5, 3, 2, 0.78)', 0.41));
+      alarmGlow = paintToCanvas((c) => Room.paintVignette(c, layout, 'rgba(232, 57, 29, 0.9)', 0.52));
     }
 
     function paintToCanvas(paint) {
@@ -91,14 +102,14 @@
     function event(e) {
       switch (e.type) {
         case 'combo':
-          popup(`×${e.combo} COMBO`, GAUGE.x, GAUGE.y - GAUGE.r - 42, COLORS.amber, 28);
+          popup(`×${e.combo} COMBO`, layout.combo, COLORS.amber, 28);
           fx.ringPulse = 1;
           break;
         case 'combo-lost':
-          popup('COMBO LOST', GAUGE.x, GAUGE.y - GAUGE.r - 42, COLORS.muted, 18);
+          popup('COMBO LOST', layout.combo, COLORS.muted, 18);
           break;
         case 'order-up':
-          popup(`+${e.bonus}  ORDER UP!`, POD.x, POD.y - 300, COLORS.amber, 26);
+          popup(`+${e.bonus}  ORDER UP!`, toStage(layout.machine, POD.x, POD.y - 300), COLORS.amber, 26);
           fx.cheer = 1.6;
           fx.orderUp = 1.6;
           fx.portFlash = 1;
@@ -109,7 +120,7 @@
           confetti(150);
           break;
         case 'surge-warning':
-          popup('SURGE INCOMING', POD.x, POD.y - 10, COLORS.amber, 18);
+          popup('SURGE INCOMING', toStage(layout.machine, POD.x, POD.y - 10), COLORS.amber, 18);
           break;
         case 'surge':
           fx.shake = Math.max(fx.shake, 7);
@@ -123,8 +134,9 @@
       }
     }
 
-    function popup(text, x, y, color, size) {
-      fx.popups.push({ text, x, y, color, size, age: 0, life: 1.3 });
+    // A line of text that rises and fades at a stage point.
+    function popup(text, at, color, size) {
+      fx.popups.push({ text, x: at.x, y: at.y, color, size: size * layout.text, age: 0, life: 1.3 });
     }
 
     function puffRing(x, y, count) {
@@ -137,9 +149,9 @@
     function confetti(count) {
       const colors = [COLORS.heat, COLORS.amber, COLORS.cream, '#C9461A'];
       for (let i = 0; i < count; i += 1) {
-        spawn({
-          kind: 'confetti',
-          x: rand(40, W - 40),
+        fx.confetti.push({
+          age: 0,
+          x: rand(20, layout.width - 20),
           y: rand(-140, -10),
           vx: rand(-60, 60),
           vy: rand(80, 220),
@@ -148,6 +160,7 @@
           size: rand(6, 11),
           spin: rand(-9, 9),
           rot: rand(0, TAU),
+          grow: 0,
           life: rand(3.2, 4.6),
           color: colors[i % colors.length],
         });
@@ -253,7 +266,7 @@
       // Back from the brink: a close call when the needle drops into the zone after 95 PSI or more.
       if (live && game.psi >= 95) fx.brink = Math.max(fx.brink, game.psi);
       if (live && fx.brink && game.psi <= 85) {
-        popup('CLOSE CALL!', POD.x, POD.y - 300, COLORS.amber, 24);
+        popup('CLOSE CALL!', toStage(layout.machine, POD.x, POD.y - 300), COLORS.amber, 24);
         fx.brink = 0;
       }
 
@@ -274,25 +287,8 @@
         }
       }
 
-      for (const p of fx.particles) {
-        p.age += dt;
-        const drag = Math.exp(-(p.drag || 0) * dt);
-        p.vx *= drag;
-        p.vy = p.vy * drag + p.gravity * dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        p.size += p.grow * dt;
-        p.rot += p.spin * dt;
-        if (p.floor && p.y > p.floor) {
-          p.y = p.floor;
-          p.vy *= -0.35;
-          p.vx *= 0.5;
-          p.spin *= 0.5;
-        }
-      }
-      let kept = 0;
-      for (const p of fx.particles) if (p.age < p.life) fx.particles[kept++] = p;
-      fx.particles.length = kept;
+      moveParticles(fx.particles, dt);
+      moveParticles(fx.confetti, dt);
 
       for (const p of fx.popups) p.age += dt;
       fx.popups = fx.popups.filter((p) => p.age < p.life);
@@ -318,6 +314,29 @@
         fx.bubbleAge = 0;
       }
       fx.bubbleAge += dt;
+    }
+
+    // Ages, moves and drops the dead, in place.
+    function moveParticles(list, dt) {
+      let kept = 0;
+      for (const p of list) {
+        p.age += dt;
+        const drag = Math.exp(-(p.drag || 0) * dt);
+        p.vx *= drag;
+        p.vy = p.vy * drag + p.gravity * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.size += p.grow * dt;
+        p.rot += p.spin * dt;
+        if (p.floor && p.y > p.floor) {
+          p.y = p.floor;
+          p.vy *= -0.35;
+          p.vx *= 0.5;
+          p.spin *= 0.5;
+        }
+        if (p.age < p.life) list[kept++] = p;
+      }
+      list.length = kept;
     }
 
     function fly(o, dt, gravity) {
@@ -348,17 +367,20 @@
       c.fillStyle = COLORS.bg;
       c.fillRect(0, 0, canvas.width, canvas.height);
 
-      const amount = reducedMotion ? 0 : fx.shake;
-      const sx = amount ? Math.sin(fx.t * 91) * amount * 0.8 : 0;
-      const sy = amount ? Math.cos(fx.t * 77) * amount * 0.6 : 0;
-      c.setTransform(1, 0, 0, 1, Math.round(sx * scale), Math.round(sy * scale));
+      const amount = reducedMotion ? 0 : fx.shake * (layout.name === 'wide' ? 1 : 0.7);
+      shakeX = amount ? Math.sin(fx.t * 91) * amount * 0.8 : 0;
+      shakeY = amount ? Math.cos(fx.t * 77) * amount * 0.6 : 0;
+      c.setTransform(1, 0, 0, 1, Math.round(shakeX * scale), Math.round(shakeY * scale));
       if (cache) c.drawImage(cache, 0, 0);
-      c.setTransform(scale, 0, 0, scale, sx * scale, sy * scale);
 
       const heat = mode === 'ready' ? 0.15 : clamp(game.psi / 100, 0, 1);
+      inView(c, layout.machine);
       drawRoomLight(c, heat);
+      onStage(c);
       drawBeacons(c, game, mode, band);
+      inView(c, layout.gauge);
       drawGaugeFront(c, game, mode, band);
+      inView(c, layout.machine);
       drawFlames(c, mode === 'ready' ? 0.12 : clamp(game.heat / Sim.TUNING.heatMax, 0.15, 1.4));
       drawPod(c, game, mode, heat);
       const knob = drawLever(c, mode === 'ready' ? 0 : game.lever);
@@ -374,9 +396,11 @@
       });
       drawParticles(c);
       drawFlying(c);
+      onStage(c);
+      drawConfetti(c);
       drawPopups(c);
-      drawBubble(c);
-      drawHint(c, knob);
+      if (fx.hint > 0) drawHint(c, toStage(layout.machine, knob.x, knob.y));
+      else drawBubble(c);
 
       // Screen-space layers, not shaken.
       c.setTransform(1, 0, 0, 1, 0, 0);
@@ -395,6 +419,16 @@
       if (vignette) c.drawImage(vignette, 0, 0);
     }
 
+    // Draws in a view's world coordinates from here on, shaken with the stage.
+    function inView(c, view) {
+      c.setTransform(scale * view.k, 0, 0, scale * view.k, scale * (view.dx + shakeX), scale * (view.dy + shakeY));
+    }
+
+    // Draws in stage coordinates from here on, shaken.
+    function onStage(c) {
+      c.setTransform(scale, 0, 0, scale, scale * shakeX, scale * shakeY);
+    }
+
     function drawRoomLight(c, heat) {
       const glow = 0.12 + 0.55 * heat * heat + fx.surgeFlare * 0.2;
       c.save();
@@ -409,7 +443,8 @@
 
     function drawBeacons(c, game, mode, band) {
       const alarm = !fx.blown && mode === 'playing' && (band === 'hot' || band === 'critical' || game.surge.stage !== 'calm');
-      for (const [i, b] of BEACONS.entries()) {
+      const reach = layout.beaconReach;
+      for (const [i, b] of layout.beacons.entries()) {
         c.fillStyle = COLORS.metalDark;
         roundRect(c, b.x - 16, b.y + 8, 32, 12, 3);
         c.fill();
@@ -420,14 +455,14 @@
           c.globalAlpha = 0.22;
           c.translate(b.x, b.y);
           c.rotate(a);
-          const beam = c.createLinearGradient(0, 0, 240, 0);
+          const beam = c.createLinearGradient(0, 0, reach, 0);
           beam.addColorStop(0, 'rgba(255, 179, 92, 0.9)');
           beam.addColorStop(1, 'rgba(255, 179, 92, 0)');
           c.fillStyle = beam;
           c.beginPath();
           c.moveTo(0, 0);
-          c.lineTo(240, -46);
-          c.lineTo(240, 46);
+          c.lineTo(reach, -reach * 0.19);
+          c.lineTo(reach, reach * 0.19);
           c.closePath();
           c.fill();
           c.restore();
@@ -842,15 +877,21 @@
           c.fillStyle = '#3E312A';
           c.fillRect(-p.size / 2, -p.size / 2, p.size / 3, p.size);
           c.restore();
-        } else if (p.kind === 'confetti') {
-          c.globalAlpha = life > 0.8 ? (1 - life) * 5 : 1;
-          c.save();
-          c.translate(p.x + Math.sin(p.age * 5 + p.rot) * 10, p.y);
-          c.rotate(p.rot);
-          c.fillStyle = p.color;
-          c.fillRect(-p.size / 2, -p.size / 4, p.size, (p.size / 2) * Math.abs(Math.cos(p.age * 6 + p.rot)) + 1);
-          c.restore();
         }
+      }
+      c.globalAlpha = 1;
+    }
+
+    function drawConfetti(c) {
+      for (const p of fx.confetti) {
+        const life = p.age / p.life;
+        c.globalAlpha = life > 0.8 ? (1 - life) * 5 : 1;
+        c.save();
+        c.translate(p.x + Math.sin(p.age * 5 + p.rot) * 10, p.y);
+        c.rotate(p.rot);
+        c.fillStyle = p.color;
+        c.fillRect(-p.size / 2, -p.size / 4, p.size, (p.size / 2) * Math.abs(Math.cos(p.age * 6 + p.rot)) + 1);
+        c.restore();
       }
       c.globalAlpha = 1;
     }
@@ -888,76 +929,95 @@
         const grow = life < 0.15 ? 0.7 + life * 2 : 1;
         c.globalAlpha = life > 0.7 ? (1 - life) / 0.3 : 1;
         c.font = `800 ${Math.round(p.size * grow)}px ${MONO}`;
+        const half = c.measureText(p.text).width / 2 + 10;
+        const x = clamp(p.x, half, layout.width - half);
+        const y = p.y - rise * 40 * layout.text;
         c.lineWidth = 5;
         c.strokeStyle = COLORS.bg;
-        c.strokeText(p.text, p.x, p.y - rise * 40);
+        c.strokeText(p.text, x, y);
         c.fillStyle = p.color;
-        c.fillText(p.text, p.x, p.y - rise * 40);
+        c.fillText(p.text, x, y);
       }
       c.globalAlpha = 1;
     }
 
-    // A pointer to the lever for a first-time cook.
+    // A pointer to the lever for a first-time cook, given the knob's stage point: beside the knob
+    // on a wide stage, above it on a tall one.
     function drawHint(c, knob) {
-      if (fx.hint <= 0) return;
-      const pulse = 0.75 + 0.25 * Math.sin(fx.t * 6);
-      const x = knob.x - 150;
-      const y = knob.y - 64;
+      const ts = layout.text;
+      const wide = layout.name === 'wide';
+      const [first, second] = touch ? ['TOUCH & HOLD', 'ANYWHERE TO VENT'] : ['HOLD SPACE', 'OR CLICK & HOLD'];
+      const big = `800 ${15 * ts}px ${MONO}`;
+      const small = `700 ${11 * ts}px ${MONO}`;
       c.save();
-      c.globalAlpha = fx.hint * pulse;
-      c.font = `800 15px ${MONO}`;
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      const w = c.measureText('HOLD SPACE').width + 28;
+      c.font = big;
+      let w = c.measureText(first).width;
+      c.font = small;
+      w = Math.max(w, c.measureText(second).width) + 28 * ts;
+      const h = 52 * ts;
+      const x = clamp(knob.x + (wide ? -150 : -30) * ts, w / 2 + 8, layout.width - w / 2 - 8);
+      const y = knob.y + (wide ? -64 : -100) * ts;
+      c.globalAlpha = fx.hint * (0.75 + 0.25 * Math.sin(fx.t * 6));
       c.fillStyle = 'rgba(13, 9, 8, 0.92)';
-      roundRect(c, x - w / 2, y - 26, w, 52, 6);
+      roundRect(c, x - w / 2, y - h / 2, w, h, 6);
       c.fill();
       c.strokeStyle = COLORS.amber;
       c.lineWidth = 2;
       c.stroke();
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.font = big;
       c.fillStyle = COLORS.cream;
-      c.fillText('HOLD SPACE', x, y - 8);
-      c.font = `700 11px ${MONO}`;
+      c.fillText(first, x, y - 8 * ts);
+      c.font = small;
       c.fillStyle = COLORS.amber;
-      c.fillText('OR CLICK & HOLD', x, y + 11);
-      // An arrow to the knob.
-      const tx = knob.x - 22;
-      const ty = knob.y - 10;
-      const sx = x + w / 2 + 4;
+      c.fillText(second, x, y + 11 * ts);
+
+      // An arrow from the box to the knob.
+      const start = wide ? { x: x + w / 2 + 4, y } : { x, y: y + h / 2 + 4 };
+      const end = wide ? { x: knob.x - 22, y: knob.y - 10 } : { x: knob.x - 4, y: knob.y - 22 * ts };
+      const bend = wide ? { x: end.x - 10, y: start.y } : { x: start.x, y: end.y - 12 };
       c.strokeStyle = COLORS.amber;
       c.lineWidth = 3;
       c.lineCap = 'round';
       c.beginPath();
-      c.moveTo(sx, y);
-      c.quadraticCurveTo(tx - 10, y, tx, ty);
+      c.moveTo(start.x, start.y);
+      c.quadraticCurveTo(bend.x, bend.y, end.x, end.y);
       c.stroke();
-      const a = Math.atan2(ty - y, 10); // the curve's heading where it meets the knob
+      const a = Math.atan2(end.y - bend.y, end.x - bend.x); // the curve's heading where it meets the knob
       c.beginPath();
-      c.moveTo(tx, ty);
-      c.lineTo(tx - Math.cos(a - 0.5) * 11, ty - Math.sin(a - 0.5) * 11);
-      c.moveTo(tx, ty);
-      c.lineTo(tx - Math.cos(a + 0.5) * 11, ty - Math.sin(a + 0.5) * 11);
+      c.moveTo(end.x, end.y);
+      c.lineTo(end.x - Math.cos(a - 0.5) * 11, end.y - Math.sin(a - 0.5) * 11);
+      c.moveTo(end.x, end.y);
+      c.lineTo(end.x - Math.cos(a + 0.5) * 11, end.y - Math.sin(a + 0.5) * 11);
       c.stroke();
       c.restore();
     }
 
+    // Gasket's line, in a bubble whose tail points at his toque.
     function drawBubble(c) {
       const text = fx.bubbleText;
       if (!text) return;
+      const ts = layout.text;
+      const tip = toStage(layout.machine, GASKET.x - 28, GASKET.y - 326);
       const pop = Math.min(1, fx.bubbleAge / 0.16);
       const s = 0.85 + 0.15 * (1 - Math.pow(1 - pop, 3));
       c.save();
-      c.translate(GASKET.x - 58, GASKET.y - 360);
+      c.font = `800 ${16 * ts}px ${MONO}`;
+      const w = c.measureText(text).width + 26 * ts;
+      const h = 36 * ts;
+      const x = clamp(tip.x - 30 * ts, w / 2 + 8, layout.width - w / 2 - 8);
+      const y = tip.y - 34 * ts;
+      c.translate(x, y);
       c.scale(s, s);
-      c.font = `800 16px ${MONO}`;
-      const w = c.measureText(text).width + 26;
       c.fillStyle = COLORS.cream;
-      roundRect(c, -w / 2, -18, w, 36, 8);
+      roundRect(c, -w / 2, -h / 2, w, h, 8 * ts);
       c.fill();
+      const base = clamp(tip.x - x - 14 * ts, -w / 2 + 14 * ts, w / 2 - 14 * ts);
       c.beginPath();
-      c.moveTo(6, 16);
-      c.lineTo(26, 16);
-      c.lineTo(30, 34);
+      c.moveTo(base - 10 * ts, h / 2 - 2);
+      c.lineTo(base + 10 * ts, h / 2 - 2);
+      c.lineTo(tip.x - x, tip.y - y);
       c.closePath();
       c.fill();
       c.fillStyle = COLORS.bg;
@@ -992,5 +1052,5 @@
     return lines;
   }
 
-  root.GasketRender = { create, W, H };
+  root.GasketRender = { create };
 })(window);

@@ -9,6 +9,7 @@
   'use strict';
 
   const Sim = window.GasketSim;
+  const Art = window.GasketArt;
   const { TUNING } = Sim;
   const STEP = 1 / 120; // the game advances in fixed steps, whatever the frame rate
   const BLOWOUT_SCREEN_AFTER = 1.2; // seconds of explosion before the game-over screen
@@ -62,8 +63,11 @@
     },
   };
 
-  const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const renderer = window.GasketRender.create(ui.canvas, { reducedMotion });
+  const media = (query) => Boolean(window.matchMedia && window.matchMedia(query).matches);
+  const renderer = window.GasketRender.create(ui.canvas, {
+    reducedMotion: media('(prefers-reduced-motion: reduce)'),
+    touch: media('(pointer: coarse)'),
+  });
   const audio = window.GasketAudio.create(store.get('gasket.muted') === '1');
 
   let game = Sim.createGame(newSeed());
@@ -399,11 +403,24 @@
 
   // ------------------------------------------------------------- the stage
 
+  // Upright screens (phones held upright) get the tall layout, as tall as their shape allows;
+  // the others the wide one. The stage then scales to fit the window.
   function fit() {
-    const scale = Math.min(ui.room.clientWidth / window.GasketRender.W, ui.room.clientHeight / window.GasketRender.H);
+    const w = ui.room.clientWidth;
+    const h = ui.room.clientHeight;
+    const layout = w / h < 0.85 ? Art.tallLayout(Math.round(Math.min(1100, Math.max(800, (450 * h) / w)))) : Art.wideLayout();
+    const scale = Math.min(w / layout.width, h / layout.height);
+    ui.stage.dataset.layout = layout.name;
+    ui.stage.dataset.compact = String(layout.name === 'wide' && scale < 0.8); // a phone held sideways: bigger type
+    ui.stage.style.width = `${layout.width}px`;
+    ui.stage.style.height = `${layout.height}px`;
     ui.stage.style.setProperty('--scale', String(scale));
+    const readout = Art.toStage(layout.gauge, Art.READOUT.x, Art.READOUT.y);
+    ui.meter.style.left = `${readout.x}px`;
+    ui.meter.style.top = `${readout.y}px`;
+    ui.meter.style.transform = `scale(${layout.gauge.k})`;
     // At most 2 device pixels per stage pixel: sharp enough, and cheap on big screens.
-    renderer.resize(scale, Math.min(2 / scale, window.devicePixelRatio || 1));
+    renderer.resize(layout, scale, Math.min(2 / scale, window.devicePixelRatio || 1));
   }
 
   // ------------------------------------------------------------- helpers

@@ -1,34 +1,90 @@
 /*
  * Gasket's Pressure Kitchen: the control room's parts that never move (the wall,
  * the pipes, the floor, the gauge's face, the lever's box), painted once per
- * canvas size into the renderer's cache.
+ * layout and canvas size into the renderer's cache.
  */
 (function (root) {
   'use strict';
 
-  const { W, H, FLOOR, TAU, COLORS, MONO, GAUGE, POD, LEVER, GASKET, markPoint, psiAngle, disc, roundRect, rivet } = root.GasketArt;
+  const { FLOOR, TAU, COLORS, MONO, GAUGE, POD, LEVER, GASKET, markPoint, psiAngle, toStage, disc, roundRect, rivet } = root.GasketArt;
 
-  function paintRoom(c) {
+  // The room for a layout: the wall and the floor on its stage, the gauge's face and the
+  // machine's fixtures (vent line, lever box, burner plate, shadows) through its views.
+  function paintRoom(c, layout) {
+    const { width: w, height: h, floor } = layout;
     c.fillStyle = COLORS.bg;
-    c.fillRect(0, 0, W, H);
+    c.fillRect(0, 0, w, h);
+    paintWall(c, w, floor, layout.name === 'wide' ? [1, 6] : [2]);
 
-    // Wall panels with rivets; a couple of them carry vent grilles.
-    for (let x = 0, i = 0; x < W; x += 160, i += 1) {
+    if (layout.name === 'wide') {
+      // Stencilled on the wall, faint.
+      c.save();
+      c.fillStyle = 'rgba(243, 238, 233, 0.035)';
+      c.font = `800 92px ${MONO}`;
+      c.textAlign = 'center';
+      c.fillText('POD 01', POD.x, 216);
+      c.restore();
+
+      // Pipes: two along the ceiling, risers at both ends, and the line from the gauge into the pod.
+      pipeH(c, 0, w, 104, 18);
+      pipeH(c, 0, w, 136, 7);
+      pipeV(c, 54, 104, floor, 20);
+      pipeV(c, 1236, 104, floor, 14);
+      pipeH(c, GAUGE.x + GAUGE.r + 6, markPoint(13.8, 40).x + 6, 440, 9);
+      flange(c, GAUGE.x + GAUGE.r + 26, 440, 9, false);
+    } else {
+      // A pipe under the HUD, thin risers at the sides, and the stencil where there is room for it.
+      pipeH(c, 0, w, 146, 9);
+      pipeV(c, 12, 146, floor, 6);
+      pipeV(c, w - 12, 146, floor, 6);
+      if (layout.stencil) {
+        c.save();
+        c.fillStyle = 'rgba(243, 238, 233, 0.035)';
+        c.font = `800 72px ${MONO}`;
+        c.textAlign = 'center';
+        c.fillText('POD 01', layout.stencil.x, layout.stencil.y);
+        c.restore();
+      }
+    }
+
+    inView(c, layout.machine, () => {
+      // The vent line from the hose to Gasket's lever box.
+      pipeH(c, 686, LEVER.x - 12, 250, 8);
+      pipeV(c, LEVER.x - 19, 250, 440, 8);
+      elbow(c, LEVER.x - 19, 250, 8);
+      flange(c, 730, 250, 8, false);
+      paintLeverBox(c);
+    });
+    inView(c, layout.gauge, () => paintGauge(c));
+    paintFloor(c, w, h, floor, toStage(layout.machine, POD.x, 0).x);
+    inView(c, layout.machine, () => paintFixtures(c));
+  }
+
+  function inView(c, view, paint) {
+    c.save();
+    c.transform(view.k, 0, 0, view.k, view.dx, view.dy);
+    paint();
+    c.restore();
+  }
+
+  // Wall panels with rivets; the panels numbered in `grilles` carry vent grilles.
+  function paintWall(c, w, floor, grilles) {
+    for (let x = 0, i = 0; x < w; x += 160, i += 1) {
       c.fillStyle = i % 2 ? COLORS.panel : '#120C0A';
-      c.fillRect(x + 3, 20, 154, FLOOR - 30);
+      c.fillRect(x + 3, 20, 154, floor - 30);
       c.fillStyle = 'rgba(243, 238, 233, 0.025)';
       c.fillRect(x + 3, 20, 154, 2);
       c.fillStyle = 'rgba(0, 0, 0, 0.35)';
-      c.fillRect(x + 3, FLOOR - 12, 154, 2);
+      c.fillRect(x + 3, floor - 12, 154, 2);
       for (const [rx, ry] of [
         [x + 13, 32],
         [x + 147, 32],
-        [x + 13, FLOOR - 22],
-        [x + 147, FLOOR - 22],
+        [x + 13, floor - 22],
+        [x + 147, floor - 22],
       ]) {
         rivet(c, rx, ry, 2.6);
       }
-      if (i === 1 || i === 6) {
+      if (grilles.includes(i)) {
         for (let s = 0; s < 7; s += 1) {
           c.fillStyle = '#080504';
           roundRect(c, x + 34, 190 + s * 14, 92, 6, 3);
@@ -36,52 +92,30 @@
         }
       }
     }
+  }
 
-    // Stencilled on the wall, faint.
-    c.save();
-    c.fillStyle = 'rgba(243, 238, 233, 0.035)';
-    c.font = `800 92px ${MONO}`;
-    c.textAlign = 'center';
-    c.fillText('POD 01', POD.x, 216);
-    c.restore();
-
-    // Pipes: two along the ceiling, risers at both ends.
-    pipeH(c, 0, W, 104, 18);
-    pipeH(c, 0, W, 136, 7);
-    pipeV(c, 54, 104, FLOOR, 20);
-    pipeV(c, 1236, 104, FLOOR, 14);
-
-    // The line from the gauge into the pod.
-    pipeH(c, GAUGE.x + GAUGE.r + 6, markPoint(13.8, 40).x + 6, 440, 9);
-    flange(c, GAUGE.x + GAUGE.r + 26, 440, 9, false);
-
-    // The vent line from the hose to Gasket's lever box.
-    pipeH(c, 686, LEVER.x - 12, 250, 8);
-    pipeV(c, LEVER.x - 19, 250, 440, 8);
-    elbow(c, LEVER.x - 19, 250, 8);
-    flange(c, 730, 250, 8, false);
-
-    paintLeverBox(c);
-    paintGauge(c);
-
-    // Floor: grating in perspective, a hazard edge, the burner plate and the pod's shadow.
+  // The floor: grating in perspective toward the pod, with a hazard edge.
+  function paintFloor(c, w, h, floor, towardX) {
     c.fillStyle = '#100B09';
-    c.fillRect(0, FLOOR, W, H - FLOOR);
+    c.fillRect(0, floor, w, h - floor);
     c.strokeStyle = 'rgba(243, 238, 233, 0.035)';
     c.lineWidth = 1;
     c.beginPath();
-    for (let x = -400; x <= W + 400; x += 64) {
-      c.moveTo(POD.x + (x - POD.x) * 0.55, FLOOR + 14);
-      c.lineTo(x, H);
+    for (let x = -400; x <= w + 400; x += 64) {
+      c.moveTo(towardX + (x - towardX) * 0.55, floor + 14);
+      c.lineTo(x, h);
     }
     for (let k = 0; k < 6; k += 1) {
-      const y = FLOOR + 14 + Math.pow(k / 6, 1.6) * (H - FLOOR - 14);
+      const y = floor + 14 + Math.pow(k / 6, 1.6) * (h - floor - 14);
       c.moveTo(0, y);
-      c.lineTo(W, y);
+      c.lineTo(w, y);
     }
     c.stroke();
-    hazard(c, 0, FLOOR, W, 12);
+    hazard(c, 0, floor, w, 12);
+  }
 
+  // What stands on the floor, in world coordinates: shadows and the burner plate under the pod.
+  function paintFixtures(c) {
     c.fillStyle = 'rgba(0, 0, 0, 0.55)';
     c.beginPath();
     c.ellipse(POD.x, FLOOR + 6, 170, 14, 0, 0, TAU);
@@ -225,13 +259,16 @@
     disc(c, x + Math.cos(pin) * (r - 20), y + Math.sin(pin) * (r - 20), 4);
   }
 
-  // Darkens (or tints) the edges of the stage with an rgba() colour, clear from `inner` px out.
-  function paintVignette(c, color, inner) {
-    const g = c.createRadialGradient(W / 2, H / 2 + 20, inner, W / 2, H / 2, 820);
+  // Darkens (or tints) the edges of a layout's stage with an rgba() colour, clear up to `inner`
+  // (a share of the distance from the centre to a corner).
+  function paintVignette(c, layout, color, inner) {
+    const { width: w, height: h } = layout;
+    const reach = Math.hypot(w, h) / 2;
+    const g = c.createRadialGradient(w / 2, h / 2 + 20, reach * inner, w / 2, h / 2, reach * 1.12);
     g.addColorStop(0, color.replace(/[\d.]+\)$/, '0)')); // the same colour, transparent
     g.addColorStop(1, color);
     c.fillStyle = g;
-    c.fillRect(0, 0, W, H);
+    c.fillRect(0, 0, w, h);
   }
 
   function pipeH(c, x0, x1, y, r) {

@@ -35,10 +35,6 @@
   const GASKET = { x: 1100, y: FLOOR };
   const SHOULDER = { x: -34, y: -140 }; // Gasket's lever arm, from his feet
   const ARM = 58; // upper arm and forearm
-  const BEACONS = [
-    { x: 452, y: 150 },
-    { x: 804, y: 150 },
-  ];
 
   // The pod is the Hotpod mark (the site's favicon), drawn in its own 64-unit grid.
   const MARK = {
@@ -49,6 +45,62 @@
   };
   const VALVE = markPoint(32, 4.6); // where the steam leaves the pod
   const LID_CENTER = markPoint(32, 21);
+  const READOUT = { x: GAUGE.x - 60, y: GAUGE.y + 86 }; // the digital readout's top left, on the gauge's face
+
+  // The scene is drawn in world coordinates, which are the wide stage's. A layout places it on its
+  // own stage through two views, the gauge and the machine (pod, lever, Gasket), each a scale and
+  // an offset: stage = world × k + (dx, dy). Wide screens see the world as it is; tall ones (phones
+  // held upright) stack the gauge over a smaller machine, on a stage as tall as the screen allows.
+  function wideLayout() {
+    const same = { k: 1, dx: 0, dy: 0 };
+    return {
+      name: 'wide',
+      width: W,
+      height: H,
+      floor: FLOOR,
+      gauge: same,
+      machine: same,
+      beacons: [
+        { x: 452, y: 150 },
+        { x: 804, y: 150 },
+      ],
+      beaconReach: 240,
+      combo: { x: GAUGE.x, y: GAUGE.y - GAUGE.r - 42 },
+      text: 1,
+    };
+  }
+
+  function tallLayout(height) {
+    const width = 450;
+    const floor = height - 80;
+    const k = width / 810; // the machine's world strip, x 458 to 1268, fills the width
+    // A taller screen gets a bigger gauge (up to 12 %) and more room between it and the machine.
+    const extra = Math.max(0, height - 900);
+    const gk = 1 + Math.min(0.12, extra / 650);
+    const gaugeY = Math.max(152 + 168 * gk, 318 + extra * 0.45);
+    const gaugeBottom = gaugeY + 168 * gk;
+    const machineTop = floor - (FLOOR - 191) * k; // the valve's ball
+    return {
+      name: 'tall',
+      width,
+      height,
+      floor,
+      gauge: { k: gk, dx: width / 2 - GAUGE.x * gk, dy: gaugeY - GAUGE.y * gk },
+      machine: { k, dx: -458 * k, dy: floor - FLOOR * k },
+      beacons: [
+        { x: 30, y: 166 },
+        { x: width - 30, y: 166 },
+      ],
+      beaconReach: 150,
+      combo: { x: width / 2, y: gaugeY + (GAUGE.r + 40) * gk },
+      stencil: machineTop - gaugeBottom > 90 ? { x: width / 2, y: (gaugeBottom + machineTop) / 2 + 26 } : null,
+      text: 0.8,
+    };
+  }
+
+  function toStage(view, x, y) {
+    return { x: x * view.k + view.dx, y: y * view.k + view.dy };
+  }
 
   function markPoint(mx, my) {
     return { x: POD.x + (mx - 32) * POD.s, y: POD.y + (my - 60) * POD.s };
@@ -137,7 +189,8 @@
 
   root.GasketArt = {
     W, H, FLOOR, DEG, TAU, COLORS, MONO,
-    GAUGE, POD, LEVER, GASKET, SHOULDER, ARM, BEACONS, MARK, VALVE, LID_CENTER,
+    GAUGE, POD, LEVER, GASKET, SHOULDER, ARM, MARK, VALVE, LID_CENTER, READOUT,
+    wideLayout, tallLayout, toStage,
     markPoint, psiAngle, clamp, rand, bezier, mix,
     makeCanvas, makePuff, makeGlow, disc, ellipse, roundRect, rivet,
   };

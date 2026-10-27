@@ -65,8 +65,8 @@
     #scene {
       position: absolute;
       inset: 0;
-      width: 1280px;
-      height: 720px;
+      width: 100%;
+      height: 100%;
       display: block;
       outline: none;
       cursor: grab;
@@ -207,6 +207,7 @@
       color: var(--text);
       background: #080504;
       border: 1px solid var(--line);
+      transform-origin: 0 0;
       pointer-events: none;
     }
 
@@ -388,23 +389,81 @@
       white-space: nowrap;
     }
 
-    .turn {
-      display: none;
-      position: absolute;
-      left: 16px;
-      right: 16px;
-      bottom: 24px;
-      margin: 0;
-      font-size: 12px;
-      letter-spacing: 0.12em;
-      text-align: center;
-      text-transform: uppercase;
-      color: var(--muted);
+    /* What the controls are called: keys and a mouse, or a touch screen. */
+    .for-touch { display: none; }
+
+    @media (pointer: coarse) {
+      .for-touch { display: inline; }
+      .for-keys { display: none; }
     }
 
-    @media (orientation: portrait) and (max-width: 820px) {
-      .turn { display: block; }
+    /* The wide stage drawn small (a phone held sideways): bigger type, so it reads at that size. */
+    .stage[data-compact="true"] .panel { width: 340px; }
+    .stage[data-compact="true"] .label { font-size: 14px; }
+    .stage[data-compact="true"] .score { font-size: 52px; }
+    .stage[data-compact="true"] .combo-badge { font-size: 19px; }
+    .stage[data-compact="true"] .ticket strong { font-size: 21px; }
+    .stage[data-compact="true"] .status { font-size: 17px; padding: 10px 18px; }
+    .stage[data-compact="true"] .footer { font-size: 15px; }
+    .stage[data-compact="true"] .sound { font-size: 14px; }
+    .stage[data-compact="true"] .card { width: 760px; }
+    .stage[data-compact="true"] .card p { font-size: 19px; }
+    .stage[data-compact="true"] .eyebrow { font-size: 15px; }
+    .stage[data-compact="true"] .button { font-size: 19px; }
+    .stage[data-compact="true"] .hint { font-size: 15px; }
+    .stage[data-compact="true"] .stats dt { font-size: 13px; }
+    .stage[data-compact="true"] .stats dd { font-size: 24px; }
+
+    /* The tall layout (phones held upright): a 450 px wide stage, as tall as the screen. */
+    .stage[data-layout="tall"] .hud {
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
     }
+
+    .stage[data-layout="tall"] .panel { width: auto; padding: 8px 10px 9px; }
+    .stage[data-layout="tall"] .scoreboard { grid-column: 1; grid-row: 1; }
+    .stage[data-layout="tall"] .ticket { grid-column: 2; grid-row: 1; justify-self: stretch; }
+    .stage[data-layout="tall"] .label { font-size: 10px; letter-spacing: 0.12em; }
+    .stage[data-layout="tall"] .score { font-size: 30px; }
+    .stage[data-layout="tall"] .combo { gap: 8px; margin-top: 4px; }
+    .stage[data-layout="tall"] .combo-badge { min-width: 34px; font-size: 14px; }
+    .stage[data-layout="tall"] .combo .bar { flex: 1; width: auto; }
+    .stage[data-layout="tall"] .ticket strong { margin: 2px 0 6px; font-size: 14px; }
+    .stage[data-layout="tall"] .ticket .label:last-child { margin-top: 6px; }
+
+    .stage[data-layout="tall"] .status {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      justify-content: center;
+      margin-top: 0;
+      padding: 7px 10px;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+    }
+
+    .stage[data-layout="tall"] .footer {
+      left: 10px;
+      right: 10px;
+      bottom: 18px;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      font-size: 11px;
+    }
+
+    .stage[data-layout="tall"] .sound { position: static; }
+
+    .stage[data-layout="tall"] .card { width: 420px; padding: 22px 20px 20px; }
+    .stage[data-layout="tall"] h1,
+    .stage[data-layout="tall"] h2 { margin: 10px 0 10px; font-size: 30px; }
+    .stage[data-layout="tall"] .card p { font-size: 14px; line-height: 1.45; }
+    .stage[data-layout="tall"] .actions { flex-wrap: wrap; gap: 10px 14px; margin-top: 16px; }
+    .stage[data-layout="tall"] .button { padding: 13px 20px; }
+    .stage[data-layout="tall"] .final strong { font-size: 46px; }
+    .stage[data-layout="tall"] .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 14px; }
+    .stage[data-layout="tall"] .stats dd { font-size: 18px; }
 
     @keyframes blink { 50% { opacity: 0.45; } }
     @keyframes bump { 30% { transform: scale(1.08); } }
@@ -446,9 +505,10 @@
     </div>
 
     <footer class="footer">
-      <span><kbd>Space</kbd> or click &amp; hold: vent steam</span>
-      <span><kbd>P</kbd> pause</span>
-      <span><kbd>M</kbd> sound</span>
+      <span class="for-keys"><kbd>Space</kbd> or click &amp; hold: vent steam</span>
+      <span class="for-touch">Touch &amp; hold anywhere: vent steam</span>
+      <span class="for-keys"><kbd>P</kbd> pause</span>
+      <span class="for-keys"><kbd>M</kbd> sound</span>
       <button id="sound" class="sound" type="button" aria-pressed="true">Sound on</button>
     </footer>
 
@@ -456,11 +516,11 @@
       <div class="card">
         <p class="eyebrow">Hotpod · Pod 01</p>
         <h1 id="start-title">Gasket's Pressure Kitchen</h1>
-        <p>The pod builds pressure on its own. Hold <strong>Space</strong>, or click and hold anywhere, to pull Gasket's lever and vent steam.</p>
+        <p>The pod builds pressure on its own. <span class="for-keys">Hold <strong>Space</strong>, or click and hold anywhere,</span><span class="for-touch">Touch and hold anywhere</span> to pull Gasket's lever and vent steam.</p>
         <p>Keep the needle in the orange <strong>65–85 PSI</strong> zone to cook and score. Stay there to raise the combo and serve orders; serve eight to finish the shift. At <strong>100 PSI</strong> the valve blows.</p>
         <div class="actions">
           <button id="start-button" class="button" type="button">Start cooking</button>
-          <span class="hint">or press Space</span>
+          <span class="hint for-keys">or press Space</span>
           <span id="start-best" class="hint"></span>
         </div>
       </div>
@@ -473,7 +533,7 @@
         <p>The pressure holds still until you are back.</p>
         <div class="actions">
           <button id="resume-button" class="button" type="button">Resume</button>
-          <span class="hint">or press Space or P</span>
+          <span class="hint for-keys">or press Space or P</span>
         </div>
       </div>
     </section>
@@ -488,7 +548,7 @@
         <dl id="over-stats" class="stats"></dl>
         <div class="actions">
           <button id="again-button" class="button" type="button">Play again</button>
-          <span class="hint">or press Space</span>
+          <span class="hint for-keys">or press Space</span>
         </div>
       </div>
     </section>
@@ -508,7 +568,6 @@
       </div>
     </section>
   </main>
-  <p class="turn">Turn your phone sideways for a bigger kitchen</p>
   </div>
 
   <p id="announcer" class="visually-hidden" aria-live="polite"></p>
