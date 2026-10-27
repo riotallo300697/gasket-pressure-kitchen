@@ -51,9 +51,9 @@
         lid: null, // the lid in flight after a blowout
         hat: null, // Gasket's toque in flight
         blown: false,
+        blownAt: 0,
         soot: 0,
         cheer: 0,
-        celebrate: 0,
         surgeFlare: 0,
         ringPulse: 0,
         portFlash: 0,
@@ -105,7 +105,6 @@
           puffRing(LID_CENTER.x, LID_CENTER.y + 20, 26);
           break;
         case 'shift-complete':
-          fx.celebrate = 4;
           fx.cheer = 4;
           confetti(150);
           break;
@@ -157,6 +156,7 @@
 
     function blowout() {
       fx.blown = true;
+      fx.blownAt = fx.t;
       fx.flash = 1;
       fx.shake = 28;
       fx.soot = 1;
@@ -206,7 +206,7 @@
       // The needle is a damped spring chasing the pressure; it rattles when the pod runs hot.
       let target = mode === 'ready' ? 0 : game.psi;
       if (live && game.psi > 85) target += ((game.psi - 85) / 15) * 1.6 * Math.sin(fx.t * 53) * Math.sin(fx.t * 7.3);
-      if (fx.blown) target = fx.t % 1 < 0.5 && mode === 'blowout' ? 103 : 0;
+      if (fx.blown) target = fx.t - fx.blownAt < 0.7 ? 103 : 0; // pinned on the stop, then limp
       const sub = Math.max(1, Math.ceil(dt / (1 / 240)));
       for (let i = 0; i < sub; i += 1) {
         const h = dt / sub;
@@ -300,7 +300,6 @@
       fx.shake = Math.max(0, fx.shake - dt * (fx.shake > 10 ? 30 : 14));
       fx.flash = Math.max(0, fx.flash - dt * 2.2);
       fx.cheer = Math.max(0, fx.cheer - dt);
-      fx.celebrate = Math.max(0, fx.celebrate - dt);
       fx.orderUp = Math.max(0, fx.orderUp - dt);
       fx.surgeFlare = Math.max(0, fx.surgeFlare - dt * 1.5);
       fx.ringPulse = Math.max(0, fx.ringPulse - dt * 2);
@@ -313,7 +312,7 @@
       }
       fx.blink = Math.max(0, fx.blink - dt);
 
-      const text = bubbleFor(game, mode, band);
+      const text = bubbleFor(mode, band);
       if (text !== fx.bubbleText) {
         fx.bubbleText = text;
         fx.bubbleAge = 0;
@@ -330,7 +329,7 @@
     }
 
     // Gasket's line, in the pod's own words: NAPPING, LET HIM COOK, HOLDING PRESSURE, HOLD MY HAT, IN ORBIT.
-    function bubbleFor(game, mode, band) {
+    function bubbleFor(mode, band) {
       if (mode === 'ready') return 'NAPPING';
       if (fx.blown) return 'IN ORBIT';
       if (mode === 'won') return 'SHIFT DONE!';
@@ -360,7 +359,7 @@
       drawRoomLight(c, heat);
       drawBeacons(c, game, mode, band);
       drawGaugeFront(c, game, mode, band);
-      drawFlames(c, game, mode);
+      drawFlames(c, mode === 'ready' ? 0.12 : clamp(game.heat / Sim.TUNING.heatMax, 0.15, 1.4));
       drawPod(c, game, mode, heat);
       const knob = drawLever(c, mode === 'ready' ? 0 : game.lever);
       Chef.draw(c, {
@@ -543,10 +542,10 @@
 
     // -------------------------------------------------------------- the pod
 
-    function drawFlames(c, game, mode) {
+    // `burner` is the heat as a share of the most the burner gives.
+    function drawFlames(c, burner) {
       if (fx.blown) return;
-      const T = root.GasketSim ? root.GasketSim.TUNING : null;
-      const power = mode === 'ready' ? 0.12 : clamp(game.heat / (T ? T.heatMax : 16), 0.15, 1.4) + fx.surgeFlare * 0.3;
+      const power = burner + fx.surgeFlare * 0.3;
       const base = markPoint(32, 56.4);
       c.save();
       c.globalCompositeOperation = 'lighter';
@@ -655,7 +654,7 @@
         c.strokeStyle = 'rgba(13, 9, 8, 0.55)';
         c.lineWidth = 0.32;
         c.stroke(paths.lid);
-        drawValveStem(c, rattle, game);
+        drawValveStem(c, rattle, mode === 'ready' ? 0 : game.lever);
         c.restore();
       } else {
         // The open rim, glowing inside.
@@ -741,7 +740,7 @@
     }
 
     // The stem and ball on the lid (the Hotpod mark's antenna) is the vent valve.
-    function drawValveStem(c, rattle, game) {
+    function drawValveStem(c, rattle, open) {
       const tilt = rattle > 0.2 ? Math.sin(fx.t * 47) * rattle * 0.22 : 0;
       c.save();
       c.translate(32, 16);
@@ -750,7 +749,6 @@
       c.fillRect(-1.5, -7, 3, 7);
       c.fillStyle = 'rgba(13, 9, 8, 0.35)';
       c.fillRect(-1.5, -4.2, 3, 0.6);
-      const open = game.lever || 0;
       c.fillStyle = COLORS.heat;
       disc(c, 0, -9 - open * 0.8, 2.6);
       c.fillStyle = 'rgba(255, 249, 243, 0.5)';
@@ -933,7 +931,7 @@
       c.moveTo(sx, y);
       c.quadraticCurveTo(tx - 10, y, tx, ty);
       c.stroke();
-      const a = Math.atan2(ty - y, tx - (tx - 10));
+      const a = Math.atan2(ty - y, 10); // the curve's heading where it meets the knob
       c.beginPath();
       c.moveTo(tx, ty);
       c.lineTo(tx - Math.cos(a - 0.5) * 11, ty - Math.sin(a - 0.5) * 11);
@@ -969,8 +967,6 @@
       c.restore();
     }
 
-    // ------------------------------------------------------- the static room
-
     return { resize, reset, event, frame };
   }
 
@@ -985,7 +981,7 @@
       let py = -30;
       const line = [[px, py]];
       for (let k = 0; k < 5; k += 1) {
-        a += (Math.sin(i * 7 + k * 3) * 0.5);
+        a += Math.sin(i * 7 + k * 3) * 0.5;
         px += Math.cos(a) * 26;
         py += Math.sin(a) * 26;
         if (Math.hypot(px, py) > 145) break;

@@ -15,10 +15,8 @@
   const COLORS = {
     bg: '#0D0908',
     panel: '#140D0B',
-    seam: '#1E1512',
     rivet: '#2E221D',
     metalDark: '#241B17',
-    metal: '#3E312A',
     metalLight: '#6A564B',
     cream: '#F3EEE9',
     creamShade: '#D3C7BD',
@@ -140,7 +138,7 @@
   root.GasketArt = {
     W, H, FLOOR, DEG, TAU, COLORS, MONO,
     GAUGE, POD, LEVER, GASKET, SHOULDER, ARM, BEACONS, MARK, VALVE, LID_CENTER,
-    markPoint, psiAngle, clamp, lerp, rand, bezier, mix,
+    markPoint, psiAngle, clamp, rand, bezier, mix,
     makeCanvas, makePuff, makeGlow, disc, ellipse, roundRect, rivet,
   };
 })(window);

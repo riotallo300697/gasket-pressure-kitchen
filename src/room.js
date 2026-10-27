@@ -225,9 +225,10 @@
     disc(c, x + Math.cos(pin) * (r - 20), y + Math.sin(pin) * (r - 20), 4);
   }
 
+  // Darkens (or tints) the edges of the stage with an rgba() colour, clear from `inner` px out.
   function paintVignette(c, color, inner) {
     const g = c.createRadialGradient(W / 2, H / 2 + 20, inner, W / 2, H / 2, 820);
-    g.addColorStop(0, color.replace(/[\d.]+\)$/, '0)'));
+    g.addColorStop(0, color.replace(/[\d.]+\)$/, '0)')); // the same colour, transparent
     g.addColorStop(1, color);
     c.fillStyle = g;
     c.fillRect(0, 0, W, H);

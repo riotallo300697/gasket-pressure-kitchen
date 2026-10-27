@@ -305,7 +305,7 @@
       if (mode !== 'playing') {
         if (!screenReady()) return;
         if (e.target instanceof HTMLButtonElement) e.target.click();
-        else confirm();
+        else screenAction();
       } else if (!space && e.target === ui.sound) {
         toggleSound();
       }
@@ -336,7 +336,7 @@
   }
 
   // Space or Enter on a screen: its main action.
-  function confirm() {
+  function screenAction() {
     if (mode === 'ready' || mode === 'over') startGame();
     else if (mode === 'paused') resume();
     else if (mode === 'won') keepCooking();
