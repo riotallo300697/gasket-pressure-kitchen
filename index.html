@@ -41,6 +41,13 @@
 
     ::selection { background: var(--heat); color: var(--bg); }
 
+    /* The window, clipped: the stage inside never makes the page scroll or zoom out on phones. */
+    .room {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+    }
+
     /* A 1280×720 stage, scaled to fit the window (main.js sets --scale). */
     .stage {
       position: absolute;
@@ -381,6 +388,24 @@
       white-space: nowrap;
     }
 
+    .turn {
+      display: none;
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 24px;
+      margin: 0;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-align: center;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    @media (orientation: portrait) and (max-width: 820px) {
+      .turn { display: block; }
+    }
+
     @keyframes blink { 50% { opacity: 0.45; } }
     @keyframes bump { 30% { transform: scale(1.08); } }
     @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
@@ -391,6 +416,7 @@
   </style>
 </head>
 <body>
+  <div id="room" class="room">
   <main id="stage" class="stage" data-mode="ready">
     <canvas id="scene" width="1280" height="720" tabindex="-1"
       aria-label="Gasket's control room: the pressure gauge, the pod and the vent lever. Hold Space, or press and hold, to vent steam."></canvas>
@@ -482,6 +508,8 @@
       </div>
     </section>
   </main>
+  <p class="turn">Turn your phone sideways for a bigger kitchen</p>
+  </div>
 
   <p id="announcer" class="visually-hidden" aria-live="polite"></p>
 

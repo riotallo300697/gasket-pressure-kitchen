@@ -14,9 +14,11 @@
   const BLOWOUT_SCREEN_AFTER = 1.2; // seconds of explosion before the game-over screen
   const WIN_SCREEN_AFTER = 0.9;
   const KEY_GUARD = 0.5; // a screen ignores Space and Enter this long, so a panicked press can't skip it
+  const MIN_PULL = 0.12; // seconds the lever stays down for any press, even one released at once
 
   const $ = (id) => document.getElementById(id);
   const ui = {
+    room: $('room'),
     stage: $('stage'),
     canvas: $('scene'),
     score: $('score'),
@@ -71,6 +73,7 @@
   let acc = 0;
   let last = performance.now();
   let wasVenting = false;
+  let pullUntil = 0; // game time until which the last press holds the lever down
   const held = { key: false };
   const pointers = new Set();
 
@@ -92,6 +95,7 @@
     game = Sim.createGame(newSeed());
     renderer.reset();
     acc = 0;
+    releaseAll();
     setMode('playing');
     audio.play('start');
     ui.canvas.focus({ preventScroll: true });
@@ -171,7 +175,7 @@
     if (mode === 'playing') {
       acc += dt;
       while (acc >= STEP && mode === 'playing') {
-        const venting = held.key || pointers.size > 0;
+        const venting = held.key || pointers.size > 0 || game.time < pullUntil;
         if (venting && !wasVenting) audio.play('lever');
         wasVenting = venting;
         Sim.step(game, STEP, venting);
@@ -298,14 +302,18 @@
     if (space || e.key === 'Enter') {
       e.preventDefault(); // Space never scrolls, and buttons answer through here, after the guard
       if (e.repeat) return;
-      if (mode === 'playing') {
-        if (space) held.key = true;
-        else if (e.target === ui.sound) toggleSound();
-        return;
+      if (mode !== 'playing') {
+        if (!screenReady()) return;
+        if (e.target instanceof HTMLButtonElement) e.target.click();
+        else confirm();
+      } else if (!space && e.target === ui.sound) {
+        toggleSound();
       }
-      if (!screenReady()) return;
-      if (e.target instanceof HTMLButtonElement) e.target.click();
-      else confirm();
+      // A Space that starts or resumes the game pulls the lever too, for as long as it is held.
+      if (space && mode === 'playing') {
+        held.key = true;
+        pull();
+      }
     } else if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
       if (mode === 'playing') pause();
       else if (mode === 'paused') resume();
@@ -338,13 +346,9 @@
   ui.canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
-    audio.unlock();
-    if (mode === 'ready') {
-      startGame();
-      return;
-    }
     if (mode !== 'playing') return;
     pointers.add(e.pointerId);
+    pull();
     try {
       ui.canvas.setPointerCapture(e.pointerId);
     } catch (err) {
@@ -364,9 +368,15 @@
   ui.sound.addEventListener('click', toggleSound);
   ui.sound.addEventListener('pointerdown', (e) => e.preventDefault()); // keep focus off it, Space stays the lever
 
+  // Any press moves the lever, however short: a tap is a short burst of steam.
+  function pull() {
+    pullUntil = game.time + MIN_PULL;
+  }
+
   function releaseAll() {
     held.key = false;
     pointers.clear();
+    pullUntil = 0;
   }
 
   window.addEventListener('blur', releaseAll);
@@ -390,7 +400,7 @@
   // ------------------------------------------------------------- the stage
 
   function fit() {
-    const scale = Math.min(window.innerWidth / window.GasketRender.W, window.innerHeight / window.GasketRender.H);
+    const scale = Math.min(ui.room.clientWidth / window.GasketRender.W, ui.room.clientHeight / window.GasketRender.H);
     ui.stage.style.setProperty('--scale', String(scale));
     // At most 2 device pixels per stage pixel: sharp enough, and cheap on big screens.
     renderer.resize(scale, Math.min(2 / scale, window.devicePixelRatio || 1));
